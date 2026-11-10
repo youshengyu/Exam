@@ -166,24 +166,6 @@
                     <!-- 動態渲染卡片放置於此 -->
                 </div>
 
-                <!-- 載入中提示區塊 -->
-                <div id="loading-state" class="hidden flex-col items-center justify-center py-16 bg-white rounded-2xl border border-slate-200 text-center">
-                    <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-                    <h3 class="font-bold text-slate-700 text-base mb-1">正在自動同步最新雲端資料...</h3>
-                    <p class="text-xs text-slate-400">請稍候，系統正向 Google Drive 抓取最新的考卷與解答檔案。</p>
-                </div>
-
-                <!-- 分頁控制列 (Pagination) -->
-                <div id="pagination-container" class="hidden bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex items-center justify-between">
-                    <div class="text-xs text-slate-500">
-                        顯示第 <span id="page-start-idx" class="font-bold text-slate-700">1</span> - <span id="page-end-idx" class="font-bold text-slate-700">10</span> 項，共 <span id="page-total-count" class="font-bold text-slate-700">0</span> 項
-                    </div>
-                    
-                    <div class="flex items-center space-x-1.5" id="page-numbers">
-                        <!-- 動態生成頁碼按鈕 -->
-                    </div>
-                </div>
-
                 <!-- 無資料提示區塊 -->
                 <div id="empty-state" class="hidden flex-col items-center justify-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 text-center">
                     <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-4">
@@ -307,10 +289,6 @@
             }
         ];
 
-        // 分頁相關狀態
-        let currentPage = 1;
-        const pageSize = 10;
-
         // 頁面 DOM 元素宣告
         const citySelect = document.getElementById('city-select');
         const schoolSelect = document.getElementById('school-select');
@@ -323,31 +301,207 @@
         const countSpan = document.getElementById('count-span');
         const examGrid = document.getElementById('exam-grid');
         const emptyState = document.getElementById('empty-state');
-        const loadingState = document.getElementById('loading-state');
         const resetBtn = document.getElementById('reset-btn');
 
-        // 分頁 DOM 宣告
-        const paginationContainer = document.getElementById('pagination-container');
-        // 顯示 / 隱藏載入狀態
-        function toggleLoading(show) {
-            if (show) {
-                examGrid.classList.add('hidden');
-                emptyState.classList.add('hidden');
-                emptyState.classList.remove('flex');
-                paginationContainer.classList.add('hidden');
-                loadingState.classList.remove('hidden');
-                loadingState.classList.add('flex');
-            } else {
-                loadingState.classList.add('hidden');
-                loadingState.classList.remove('flex');
-                examGrid.classList.remove('hidden');
-            }
+        // Cloud Sidebar DOM 宣告
+        const openCloudBtn = document.getElementById('open-cloud-btn');
+        const closeCloudBtn = document.getElementById('close-cloud-btn');
+        const cloudSidebar = document.getElementById('cloud-sidebar');
+        const cloudOverlay = document.getElementById('cloud-sidebar-overlay');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const folderUrlInput = document.getElementById('folder-url-input');
+        const loadFolderBtn = document.getElementById('load-folder-btn');
+
+        // Preview Modal DOM 宣告
+        const previewModal = document.getElementById('preview-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDownloadBtn = document.getElementById('modal-download-btn');
+        const pdfFrame = document.getElementById('pdf-frame');
+
+        // 提取乾淨的 Folder ID
+        function extractFolderId(inputStr) {
+            if (!inputStr) return '';
+            const match = inputStr.match(/folders\/([a-zA-Z0-9_-]+)/);
+            return match ? match[1] : inputStr.trim();
         }
 
-        // 渲染考卷列表 (橫向膠囊按鈕風格，支援一頁10筆)
-        function renderExams() {
-            toggleLoading(false);
+        // 讀取/儲存 LocalStorage 設定
+        function loadSavedCredentials() {
+            const apiKey = localStorage.getItem('exam_sys_api_key') || '';
+            const folderUrl = localStorage.getItem('exam_sys_folder_url') || '';
+            if (apiKey) apiKeyInput.value = apiKey;
+            if (folderUrl) folderUrlInput.value = folderUrl;
+            return { apiKey, folderUrl };
+        }
 
+        // 遞迴掃描 Google Drive 資料夾
+        async function scanFolderRecursively(rootFolderInput, apiKey) {
+            const rootId = extractFolderId(rootFolderInput);
+            const allFiles = [];
+
+            async function traverse(folderId, path = []) {
+                const query = `'${folderId}' in parents and trashed = false`;
+                const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=1000&key=${apiKey}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message || 'API 請求失敗');
+                }
+
+                const items = data.files || [];
+                for (const item of items) {
+                    if (item.mimeType === 'application/vnd.google-apps.folder') {
+                        await traverse(item.id, [...path, item.name]);
+                    } else if (item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf')) {
+                        allFiles.push({
+                            ...item,
+                            path: path
+                        });
+                    }
+                }
+            }
+
+            await traverse(rootId, []);
+            return allFiles;
+        }
+
+        // 解析檔名與資料夾路徑
+        function parseFilenameToExamInfo(fileItem) {
+            const fileName = fileItem.name;
+            const pathArr = fileItem.path || [];
+            const fullPathStr = pathArr.join('/') + '/' + fileName;
+
+            let school = '海山國中';
+            for (const p of pathArr) {
+                if (p.includes('中學') || p.includes('高中') || p.includes('國中') || p.includes('國小') || p.includes('小學')) {
+                    school = p;
+                    break;
+                }
+            }
+
+            // 根據資料夾與檔名判斷縣市
+            let city = '新北市';
+            if (fullPathStr.includes('台北市') || fullPathStr.includes('臺北市') || school.includes('建國中學') || school.includes('北一女') || school.includes('中山女高') || school.includes('成功高中') || school.includes('松山高中') || school.includes('金華國中') || school.includes('中正國中')) {
+                city = '台北市';
+            } else if (fullPathStr.includes('新北市') || school.includes('海山') || school.includes('板橋') || school.includes('新埔') || school.includes('江翠')) {
+                city = '新北市';
+            } else if (fullPathStr.includes('桃園市')) {
+                city = '桃園市';
+            }
+
+            let grade = '國一';
+            if (fullPathStr.includes('7年級') || fullPathStr.includes('七年級') || fullPathStr.includes('國一')) grade = '國一';
+            else if (fullPathStr.includes('8年級') || fullPathStr.includes('八年級') || fullPathStr.includes('國二')) grade = '國二';
+            else if (fullPathStr.includes('9年級') || fullPathStr.includes('九年級') || fullPathStr.includes('國三')) grade = '國三';
+            else if (fullPathStr.includes('高一')) grade = '高一';
+            else if (fullPathStr.includes('高二')) grade = '高二';
+            else if (fullPathStr.includes('高三')) grade = '高三';
+
+            let semester = fullPathStr.includes('下學期') || fullPathStr.includes('下') ? '下學期' : '上學期';
+
+            // 從資料夾路徑或檔名辨識段考類別
+            let category = '第一次段考';
+            if (fullPathStr.includes('第二次段考') || fullPathStr.includes('段考2') || fullPathStr.includes('第2次段考')) {
+                category = '第二次段考';
+            } else if (fullPathStr.includes('第三次段考') || fullPathStr.includes('段考3') || fullPathStr.includes('第3次段考')) {
+                category = '第三次段考';
+            } else if (fullPathStr.includes('期末考') || fullPathStr.includes('期末')) {
+                category = '期末考';
+            } else if (fullPathStr.includes('第一次段考') || fullPathStr.includes('段考1') || fullPathStr.includes('第1次段考')) {
+                category = '第一次段考';
+            }
+
+            // 新增：從資料夾路徑與檔名自動辨識學年度 (支援 115學年, 115年, 114學年, 113學年...)
+            let year = '115';
+            const yearMatch = fullPathStr.match(/(\d{2,3})(?:學年|年)/);
+            if (yearMatch) {
+                year = yearMatch[1];
+            }
+
+            const subjects = ['數學', '國文', '英文', '英語', '理化', '自然', '社會', '歷史', '地理', '公民', '物理', '化學', '生物'];
+            let subject = '國文';
+            for (const sub of subjects) {
+                if (fileName.includes(sub)) {
+                    subject = (sub === '英語') ? '英文' : sub;
+                    break;
+                }
+            }
+
+            let fileType = 'question';
+            if (fileName.includes('解答') || fileName.includes('Ans')) {
+                fileType = 'answerKey';
+            } else if (fileName.includes('答案卷') || fileName.includes('答題卡') || fileName.includes('A4')) {
+                fileType = 'answerSheet';
+            } else if (fileName.includes('試題卷') || fileName.includes('題目')) {
+                fileType = 'question';
+            }
+
+            return {
+                examKey: `${school}_${grade}_${semester}_${subject}_${category}_${year}`,
+                year,
+                city,
+                school,
+                grade,
+                semester,
+                subject,
+                category,
+                fileType,
+                fileObj: {
+                    name: fileName,
+                    url: fileItem.webViewLink || fileItem.webContentLink
+                }
+            };
+        }
+
+        // 打包整合
+        function groupFilesIntoExams(rawFileList) {
+            const examMap = {};
+
+            rawFileList.forEach(file => {
+                const info = parseFilenameToExamInfo(file);
+                if (!examMap[info.examKey]) {
+                    examMap[info.examKey] = {
+                        id: info.examKey,
+                        year: info.year,
+                        city: info.city,
+                        school: info.school,
+                        grade: info.grade,
+                        semester: info.semester,
+                        subject: info.subject,
+                        category: info.category,
+                        files: {}
+                    };
+                }
+                examMap[info.examKey].files[info.fileType] = info.fileObj;
+            });
+
+            return Object.values(examMap);
+        }
+
+        // 更新學校選單
+        function updateSchoolOptions() {
+            const currentSelected = schoolSelect.value;
+            const selectedCity = citySelect ? citySelect.value : '';
+            
+            // 如果選了特定縣市，只列出該縣市的學校
+            const filteredExams = selectedCity ? exams.filter(e => e.city === selectedCity) : exams;
+            const schools = [...new Set(filteredExams.map(e => e.school))].filter(Boolean);
+
+            schoolSelect.innerHTML = '<option value="">全部學校</option>';
+            schools.forEach(sch => {
+                const opt = document.createElement('option');
+                opt.value = sch;
+                opt.textContent = sch;
+                if (sch === currentSelected) opt.selected = true;
+                schoolSelect.appendChild(opt);
+            });
+        }
+
+        // 渲染考卷列表 (橫向膠囊按鈕風格)
+        function renderExams() {
             const cityVal = citySelect.value;
             const schVal = schoolSelect.value;
             const grVal = gradeSelect.value;
@@ -377,171 +531,101 @@
                 return sortVal === 'newest' ? parseInt(b.year) - parseInt(a.year) : parseInt(a.year) - parseInt(b.year);
             });
 
-            const totalItems = filtered.length;
-            countSpan.textContent = totalItems;
+            countSpan.textContent = filtered.length;
             examGrid.innerHTML = '';
 
-            if (totalItems === 0) {
+            if (filtered.length === 0) {
                 emptyState.classList.remove('hidden');
                 emptyState.classList.add('flex');
-                paginationContainer.classList.add('hidden');
-                return;
+            } else {
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
+
+                filtered.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:shadow-md transition duration-200 flex flex-col md:flex-row md:items-center justify-between gap-6';
+
+                    const qFile = item.files.question;
+                    const aKeyFile = item.files.answerKey;
+                    const aSheetFile = item.files.answerSheet;
+
+                    card.innerHTML = `
+                        <!-- 左側內容 -->
+                        <div class="space-y-3">
+                            <!-- 上方膠囊標籤列 -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="px-3 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100/80">
+                                    ${item.year}學年
+                                </span>
+                                <span class="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">
+                                    ${item.city || '新北市'}
+                                </span>
+                                <span class="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-medium">
+                                    ${item.grade}
+                                </span>
+                                <span class="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium">
+                                    ${item.subject}
+                                </span>
+                            </div>
+
+                            <!-- 主標題 (包含學校 - 學期 年級 科目 類別) -->
+                            <h3 class="text-xl font-bold text-slate-800 tracking-tight">
+                                ${item.school} - ${item.semester} ${item.grade} ${item.subject} ${item.category}
+                            </h3>
+
+                            <!-- 下方狀態徽章列 -->
+                            <div class="flex flex-wrap gap-2 text-xs">
+                                ${qFile ? `<span class="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-1.5 border border-indigo-100/60 font-medium"><i class="fa-regular fa-file-pdf text-indigo-500"></i> 包含試題卷</span>` : ''}
+                                ${aKeyFile ? `<span class="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg flex items-center gap-1.5 border border-emerald-100/60 font-medium"><i class="fa-solid fa-circle-check text-emerald-500"></i> 包含解答</span>` : ''}
+                                ${aSheetFile ? `<span class="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg flex items-center gap-1.5 border border-amber-100/60 font-medium"><i class="fa-regular fa-copy text-amber-500"></i> 包含答案卷</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- 右側固定三欄網格按鈕群 (確保跨卡片垂直對齊) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 w-full md:w-auto items-center justify-end">
+                            <div class="w-[150px] flex justify-end">
+                                ${qFile ? `
+                                    <div class="inline-flex w-full rounded-xl shadow-sm border border-indigo-200 overflow-hidden text-xs">
+                                        <button onclick="openPreview('${qFile.url}', '${item.school} 試題卷')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
+                                            <i class="fa-regular fa-eye"></i> 試題
+                                        </button>
+                                        <a href="${qFile.url}" target="_blank" download class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-indigo-700 whitespace-nowrap">
+                                            <i class="fa-solid fa-download"></i> 下載
+                                        </a>
+                                    </div>
+                                ` : '<div class="w-full"></div>'}
+                            </div>
+
+                            <div class="w-[150px] flex justify-end">
+                                ${aKeyFile ? `
+                                    <div class="inline-flex w-full rounded-xl shadow-sm border border-emerald-200 overflow-hidden text-xs">
+                                        <button onclick="openPreview('${aKeyFile.url}', '${item.school} 解答')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
+                                            <i class="fa-regular fa-eye"></i> 解答
+                                        </button>
+                                        <a href="${aKeyFile.url}" target="_blank" download class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-emerald-700 whitespace-nowrap">
+                                            <i class="fa-solid fa-download"></i> 下載
+                                        </a>
+                                    </div>
+                                ` : '<div class="w-full"></div>'}
+                            </div>
+
+                            <div class="w-[150px] flex justify-end">
+                                ${aSheetFile ? `
+                                    <div class="inline-flex w-full rounded-xl shadow-sm border border-amber-200 overflow-hidden text-xs">
+                                        <button onclick="openPreview('${aSheetFile.url}', '${item.school} 答案卷')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
+                                            <i class="fa-regular fa-eye"></i> 答案卷
+                                        </button>
+                                        <a href="${aSheetFile.url}" target="_blank" download class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-amber-700 whitespace-nowrap">
+                                            <i class="fa-solid fa-download"></i> 下載
+                                        </a>
+                                    </div>
+                                ` : '<div class="w-full"></div>'}
+                            </div>
+                        </div>
+                    `;
+                    examGrid.appendChild(card);
+                });
             }
-
-            emptyState.classList.add('hidden');
-            emptyState.classList.remove('flex');
-
-            // 計算分頁範圍
-            const totalPages = Math.ceil(totalItems / pageSize);
-            if (currentPage > totalPages) currentPage = totalPages;
-            if (currentPage < 1) currentPage = 1;
-
-            const startIndex = (currentPage - 1) * pageSize;
-            const endIndex = Math.min(startIndex + pageSize, totalItems);
-            const currentItems = filtered.slice(startIndex, endIndex);
-
-            // 渲染當前頁面的 10 筆考卷卡片
-            currentItems.forEach(item => {
-                const card = document.createElement('div');
-                card.className = 'bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:shadow-md transition duration-200 flex flex-col md:flex-row md:items-center justify-between gap-6';
-
-                const qFile = item.files.question;
-                const aKeyFile = item.files.answerKey;
-                const aSheetFile = item.files.answerSheet;
-
-                card.innerHTML = `
-                    <!-- 左側內容 -->
-                    <div class="space-y-3">
-                        <!-- 上方膠囊標籤列 -->
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="px-3 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100/80">
-                                ${item.year}學年
-                            </span>
-                            <span class="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">
-                                ${item.city || '新北市'}
-                            </span>
-                            <span class="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-medium">
-                                ${item.grade}
-                            </span>
-                            <span class="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium">
-                                ${item.subject}
-                            </span>
-                        </div>
-
-                        <!-- 主標題 (包含學校 - 學期 年級 科目 類別) -->
-                        <h3 class="text-xl font-bold text-slate-800 tracking-tight">
-                            ${item.school} - ${item.semester} ${item.grade} ${item.subject} ${item.category}
-                        </h3>
-
-                        <!-- 下方狀態徽章列 -->
-                        <div class="flex flex-wrap gap-2 text-xs">
-                            ${qFile ? `<span class="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-1.5 border border-indigo-100/60 font-medium"><i class="fa-regular fa-file-pdf text-indigo-500"></i> 包含試題卷</span>` : ''}
-                            ${aKeyFile ? `<span class="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg flex items-center gap-1.5 border border-emerald-100/60 font-medium"><i class="fa-solid fa-circle-check text-emerald-500"></i> 包含解答</span>` : ''}
-                            ${aSheetFile ? `<span class="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg flex items-center gap-1.5 border border-amber-100/60 font-medium"><i class="fa-regular fa-copy text-amber-500"></i> 包含答案卷</span>` : ''}
-                        </div>
-                    </div>
-
-                    <!-- 右側固定三欄網格按鈕群 (確保跨卡片垂直對齊) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 w-full md:w-auto items-center justify-end">
-                        <div class="w-[150px] flex justify-end">
-                            ${qFile ? `
-                                <div class="inline-flex w-full rounded-xl shadow-sm border border-indigo-200 overflow-hidden text-xs">
-                                    <button onclick="openPreview('${qFile.url}', '${item.school} 試題卷')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
-                                        <i class="fa-regular fa-eye"></i> 試題
-                                    </button>
-                                    <a href="${qFile.url}" target="_blank" download class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-indigo-700 whitespace-nowrap">
-                                        <i class="fa-solid fa-download"></i> 下載
-                                    </a>
-                                </div>
-                            ` : '<div class="w-full"></div>'}
-                        </div>
-
-                        <div class="w-[150px] flex justify-end">
-                            ${aKeyFile ? `
-                                <div class="inline-flex w-full rounded-xl shadow-sm border border-emerald-200 overflow-hidden text-xs">
-                                    <button onclick="openPreview('${aKeyFile.url}', '${item.school} 解答')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
-                                        <i class="fa-regular fa-eye"></i> 解答
-                                    </button>
-                                    <a href="${aKeyFile.url}" target="_blank" download class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-emerald-700 whitespace-nowrap">
-                                        <i class="fa-solid fa-download"></i> 下載
-                                    </a>
-                                </div>
-                            ` : '<div class="w-full"></div>'}
-                        </div>
-
-                        <div class="w-[150px] flex justify-end">
-                            ${aSheetFile ? `
-                                <div class="inline-flex w-full rounded-xl shadow-sm border border-amber-200 overflow-hidden text-xs">
-                                    <button onclick="openPreview('${aSheetFile.url}', '${item.school} 答案卷')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-2 font-medium flex-1 flex items-center justify-center gap-1 transition whitespace-nowrap">
-                                        <i class="fa-regular fa-eye"></i> 答案卷
-                                    </button>
-                                    <a href="${aSheetFile.url}" target="_blank" download class="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-2 font-medium flex items-center justify-center gap-1 transition border-l border-amber-700 whitespace-nowrap">
-                                        <i class="fa-solid fa-download"></i> 下載
-                                    </a>
-                                </div>
-                            ` : '<div class="w-full"></div>'}
-                        </div>
-                    </div>
-                `;
-                examGrid.appendChild(card);
-            });
-
-            // 渲染與更新分頁元件
-            renderPagination(totalPages, startIndex + 1, endIndex, totalItems);
-        }
-
-        // 渲染分頁按鈕UI
-        function renderPagination(totalPages, startIdx, endIdx, totalCount) {
-            if (totalPages <= 1) {
-                paginationContainer.classList.add('hidden');
-                return;
-            }
-
-            paginationContainer.classList.remove('hidden');
-            pageStartIdx.textContent = startIdx;
-            pageEndIdx.textContent = endIdx;
-            pageTotalCount.textContent = totalCount;
-
-            pageNumbers.innerHTML = '';
-
-            // 上一頁按鈕
-            const prevBtn = document.createElement('button');
-            prevBtn.className = `px-3 py-1.5 rounded-lg text-xs font-medium border transition ${currentPage === 1 ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`;
-            prevBtn.innerHTML = `<i class="fa-solid fa-chevron-left"></i>`;
-            prevBtn.disabled = currentPage === 1;
-            prevBtn.addEventListener('click', () => changePage(currentPage - 1));
-            pageNumbers.appendChild(prevBtn);
-
-            // 頁碼按鈕
-            for (let i = 1; i <= totalPages; i++) {
-                const numBtn = document.createElement('button');
-                numBtn.className = `px-3 py-1.5 rounded-lg text-xs font-medium transition ${i === currentPage ? 'bg-indigo-600 text-white font-bold shadow-sm' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'}`;
-                numBtn.textContent = i;
-                numBtn.addEventListener('click', () => changePage(i));
-                pageNumbers.appendChild(numBtn);
-            }
-
-            // 下一頁按鈕
-            const nextBtn = document.createElement('button');
-            nextBtn.className = `px-3 py-1.5 rounded-lg text-xs font-medium border transition ${currentPage === totalPages ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`;
-            nextBtn.innerHTML = `<i class="fa-solid fa-chevron-right"></i>`;
-            nextBtn.disabled = currentPage === totalPages;
-            nextBtn.addEventListener('click', () => changePage(currentPage + 1));
-            pageNumbers.appendChild(nextBtn);
-        }
-
-        // 切換頁面函式
-        function changePage(page) {
-            currentPage = page;
-            renderExams();
-            // 切換頁面時平滑捲動回考卷區塊頂端
-            examGrid.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-
-        // 當篩選條件變更時，重置回第 1 頁
-        function onFilterChange() {
-            currentPage = 1;
-            renderExams();
         }
 
         // 開啟預覽視窗
@@ -592,7 +676,6 @@
             categorySelect.value = '';
             searchInput.value = '';
             sortSelect.value = 'newest';
-            currentPage = 1;
             updateSchoolOptions();
             renderExams();
         });
@@ -600,14 +683,14 @@
         // 當縣市選單變更時，同時更新學校清單並重新過濾
         citySelect.addEventListener('change', () => {
             updateSchoolOptions();
-            onFilterChange();
+            renderExams();
         });
 
         // 監聽其他篩選變更
         [schoolSelect, gradeSelect, semesterSelect, subjectSelect, categorySelect, sortSelect].forEach(select => {
-            select.addEventListener('change', onFilterChange);
+            select.addEventListener('change', renderExams);
         });
-        searchInput.addEventListener('input', onFilterChange);
+        searchInput.addEventListener('input', renderExams);
 
         // 儲存並同步按鈕邏輯
         loadFolderBtn.addEventListener('click', async () => {
@@ -632,7 +715,6 @@
                     alert('資料夾掃描成功，但未找到任何 PDF 檔案！');
                 } else {
                     exams = groupFilesIntoExams(files);
-                    currentPage = 1;
                     updateSchoolOptions();
                     renderExams();
                     toggleSidebar(false);
@@ -649,28 +731,21 @@
         // 初始化載入
         window.addEventListener('DOMContentLoaded', async () => {
             updateSchoolOptions();
+            renderExams();
 
             const { apiKey, folderUrl } = loadSavedCredentials();
             if (apiKey && folderUrl) {
-                // 若已有憑證資訊，直接啟動全自動同步載入最新考卷
-                toggleLoading(true);
                 try {
                     const files = await scanFolderRecursively(folderUrl, apiKey);
                     if (files.length > 0) {
                         exams = groupFilesIntoExams(files);
-                        currentPage = 1;
                         updateSchoolOptions();
-                        renderExams();
-                    } else {
                         renderExams();
                     }
                 } catch (e) {
-                    console.warn('自動同步讀取失敗：', e.message);
-                    renderExams();
+                    // 自動背景同步失敗時僅在 Console 紀錄警告，不跳出警告視窗打擾使用者
+                    console.warn('自動同步讀取失敗（請確認雲端資料夾是否已設為公開，或 API Key 權限）：', e.message);
                 }
-            } else {
-                // 無設定時呈現預設範例資料
-                renderExams();
             }
         });
     </script>
