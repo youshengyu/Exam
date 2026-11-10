@@ -392,32 +392,41 @@
             const folderId = extractFolderId(folderUrlOrId);
             if (!folderId) return [];
 
-            const query = `'${folderId}' in parents and trashed = false`;
-            const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webContentLink)&pageSize=1000&key=${apiKey}`;
-
-            const res = await fetch(url);
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error?.message || `HTTP 錯誤 ${res.status}`);
-            }
-
-            const data = await res.json();
             let allFiles = [];
+            let pageToken = '';
 
-            for (const file of data.files || []) {
-                const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-                if (file.mimeType === 'application/vnd.google-apps.folder') {
-                    const subFiles = await scanFolderRecursively(file.id, apiKey, fullPath);
-                    allFiles = allFiles.concat(subFiles);
-                } else if (file.name.toLowerCase().endsWith('.pdf')) {
-                    allFiles.push({
-                        id: file.id,
-                        name: file.name,
-                        path: fullPath,
-                        url: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`
-                    });
+            do {
+                const query = `'${folderId}' in parents and trashed = false`;
+                let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=nextPageToken,files(id,name,mimeType,webContentLink)&pageSize=100&key=${apiKey}`;
+                if (pageToken) {
+                    url += `&pageToken=${pageToken}`;
                 }
-            }
+
+                const res = await fetch(url);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error?.message || `HTTP 錯誤 ${res.status}`);
+                }
+
+                const data = await res.json();
+                pageToken = data.nextPageToken || '';
+
+                for (const file of data.files || []) {
+                    const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                    if (file.mimeType === 'application/vnd.google-apps.folder') {
+                        const subFiles = await scanFolderRecursively(file.id, apiKey, fullPath);
+                        allFiles = allFiles.concat(subFiles);
+                    } else if (file.name.toLowerCase().endsWith('.pdf')) {
+                        allFiles.push({
+                            id: file.id,
+                            name: file.name,
+                            path: fullPath,
+                            url: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`
+                        });
+                    }
+                }
+            } while (pageToken);
+
             return allFiles;
         }
 
@@ -674,10 +683,12 @@
         function renderPagination(totalPages, startIdx, endIdx, totalCount) {
             if (totalPages <= 1) {
                 paginationContainer.classList.add('hidden');
+                paginationContainer.classList.remove('flex');
                 return;
             }
 
             paginationContainer.classList.remove('hidden');
+            paginationContainer.classList.add('flex');
             pageStartIdx.textContent = startIdx;
             pageEndIdx.textContent = endIdx;
             pageTotalCount.textContent = totalCount;
