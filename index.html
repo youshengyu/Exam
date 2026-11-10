@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>明光義塾考卷資源網</title>
+    <title>卓越補習班考卷資源網</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome 圖示庫 -->
@@ -28,7 +28,7 @@
                     <i class="fa-solid fa-graduation-cap text-2xl text-white"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-xl tracking-tight leading-none text-white">明光義塾考卷資源網</h1>
+                    <h1 class="font-bold text-xl tracking-tight leading-none text-white">卓越補習班考卷資源網</h1>
                     <p class="text-xs text-indigo-200 mt-1">學校歷屆段考題庫下載平台</p>
                 </div>
             </div>
@@ -164,6 +164,13 @@
                 <!-- 考卷列表容器 (橫向卡片版型) -->
                 <div id="exam-grid" class="space-y-4">
                     <!-- 動態渲染卡片放置於此 -->
+                </div>
+
+                <!-- 載入中提示區塊 -->
+                <div id="loading-state" class="hidden flex-col items-center justify-center py-16 bg-white rounded-2xl border border-slate-200 text-center">
+                    <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                    <h3 class="font-bold text-slate-700 text-base mb-1">正在自動同步最新雲端資料...</h3>
+                    <p class="text-xs text-slate-400">請稍候，系統正向 Google Drive 抓取最新的考卷與解答檔案。</p>
                 </div>
 
                 <!-- 分頁控制列 (Pagination) -->
@@ -316,16 +323,10 @@
         const countSpan = document.getElementById('count-span');
         const examGrid = document.getElementById('exam-grid');
         const emptyState = document.getElementById('empty-state');
+        const loadingState = document.getElementById('loading-state');
         const resetBtn = document.getElementById('reset-btn');
 
-        // 分頁 DOM 宣告
-        const paginationContainer = document.getElementById('pagination-container');
-        const pageStartIdx = document.getElementById('page-start-idx');
-        const pageEndIdx = document.getElementById('page-end-idx');
-        const pageTotalCount = document.getElementById('page-total-count');
-        const pageNumbers = document.getElementById('page-numbers');
-
-        // Cloud Sidebar DOM 宣告
+        // 側邊欄與 Modal 彈窗 DOM 宣告
         const openCloudBtn = document.getElementById('open-cloud-btn');
         const closeCloudBtn = document.getElementById('close-cloud-btn');
         const cloudSidebar = document.getElementById('cloud-sidebar');
@@ -334,138 +335,164 @@
         const folderUrlInput = document.getElementById('folder-url-input');
         const loadFolderBtn = document.getElementById('load-folder-btn');
 
-        // Preview Modal DOM 宣告
         const previewModal = document.getElementById('preview-modal');
-        const closeModalBtn = document.getElementById('close-modal-btn');
         const modalTitle = document.getElementById('modal-title');
         const modalDownloadBtn = document.getElementById('modal-download-btn');
+        const closeModalBtn = document.getElementById('close-modal-btn');
         const pdfFrame = document.getElementById('pdf-frame');
 
-        // 提取乾淨的 Folder ID
-        function extractFolderId(inputStr) {
-            if (!inputStr) return '';
-            const match = inputStr.match(/folders\/([a-zA-Z0-9_-]+)/);
-            return match ? match[1] : inputStr.trim();
-        }
+        // 分頁 DOM 宣告
+        const paginationContainer = document.getElementById('pagination-container');
+        const pageStartIdx = document.getElementById('page-start-idx');
+        const pageEndIdx = document.getElementById('page-end-idx');
+        const pageTotalCount = document.getElementById('page-total-count');
+        const pageNumbers = document.getElementById('page-numbers');
 
-        // 讀取/儲存 LocalStorage 設定
+        // 讀取/儲存 LocalStorage 金鑰
         function loadSavedCredentials() {
             const apiKey = localStorage.getItem('exam_sys_api_key') || '';
             const folderUrl = localStorage.getItem('exam_sys_folder_url') || '';
-            if (apiKey) apiKeyInput.value = apiKey;
-            if (folderUrl) folderUrlInput.value = folderUrl;
+            if (apiKeyInput) apiKeyInput.value = apiKey;
+            if (folderUrlInput) folderUrlInput.value = folderUrl;
             return { apiKey, folderUrl };
         }
 
+        // 解析 Folder ID
+        function extractFolderId(urlOrId) {
+            if (!urlOrId) return '';
+            const match = urlOrId.match(/folders\/([a-zA-Z0-9_-]+)/);
+            return match ? match[1] : urlOrId.trim();
+        }
+
+        // 動態更新學校下拉選單選項
+        function updateSchoolOptions() {
+            const currentSelectedCity = citySelect.value;
+            const currentSchoolVal = schoolSelect.value;
+            
+            // 收集符合縣市條件的所有學校
+            const schools = new Set();
+            exams.forEach(item => {
+                if (!currentSelectedCity || item.city === currentSelectedCity) {
+                    if (item.school) schools.add(item.school);
+                }
+            });
+
+            schoolSelect.innerHTML = '<option value="">全部學校</option>';
+            Array.from(schools).sort().forEach(school => {
+                const opt = document.createElement('option');
+                opt.value = school;
+                opt.textContent = school;
+                if (school === currentSchoolVal) opt.selected = true;
+                schoolSelect.appendChild(opt);
+            });
+        }
+
         // 遞迴掃描 Google Drive 資料夾
-        async function scanFolderRecursively(rootFolderInput, apiKey) {
-            const rootId = extractFolderId(rootFolderInput);
-            const allFiles = [];
+        async function scanFolderRecursively(folderUrlOrId, apiKey, currentPath = '') {
+            const folderId = extractFolderId(folderUrlOrId);
+            if (!folderId) return [];
 
-            async function traverse(folderId, path = []) {
-                const query = `'${folderId}' in parents and trashed = false`;
-                const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=1000&key=${apiKey}`;
-                
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error.message || 'API 請求失敗');
-                }
+            const query = `'${folderId}' in parents and trashed = false`;
+            const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webContentLink)&pageSize=1000&key=${apiKey}`;
 
-                const items = data.files || [];
-                for (const item of items) {
-                    if (item.mimeType === 'application/vnd.google-apps.folder') {
-                        await traverse(item.id, [...path, item.name]);
-                    } else if (item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf')) {
-                        allFiles.push({
-                            ...item,
-                            path: path
-                        });
-                    }
-                }
+            const res = await fetch(url);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `HTTP 錯誤 ${res.status}`);
             }
 
-            await traverse(rootId, []);
+            const data = await res.json();
+            let allFiles = [];
+
+            for (const file of data.files || []) {
+                const fullPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                if (file.mimeType === 'application/vnd.google-apps.folder') {
+                    const subFiles = await scanFolderRecursively(file.id, apiKey, fullPath);
+                    allFiles = allFiles.concat(subFiles);
+                } else if (file.name.toLowerCase().endsWith('.pdf')) {
+                    allFiles.push({
+                        id: file.id,
+                        name: file.name,
+                        path: fullPath,
+                        url: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`
+                    });
+                }
+            }
             return allFiles;
         }
 
-        // 解析檔名與資料夾路徑
-        function parseFilenameToExamInfo(fileItem) {
-            const fileName = fileItem.name;
-            const pathArr = fileItem.path || [];
-            const fullPathStr = pathArr.join('/') + '/' + fileName;
+        // 解析檔名與資料夾路徑以提煉考卷欄位
+        function parseFilenameToExamInfo(file) {
+            const pathSegments = file.path.split('/');
+            const fileName = file.name;
+            const fullStr = file.path;
 
-            let school = '海山國中';
-            for (const p of pathArr) {
-                if (p.includes('中學') || p.includes('高中') || p.includes('國中') || p.includes('國小') || p.includes('小學')) {
-                    school = p;
-                    break;
-                }
-            }
-
-            // 根據資料夾與檔名判斷縣市
+            // 自動辨識縣市
             let city = '新北市';
-            if (fullPathStr.includes('台北市') || fullPathStr.includes('臺北市') || school.includes('建國中學') || school.includes('北一女') || school.includes('中山女高') || school.includes('成功高中') || school.includes('松山高中') || school.includes('金華國中') || school.includes('中正國中')) {
-                city = '台北市';
-            } else if (fullPathStr.includes('新北市') || school.includes('海山') || school.includes('板橋') || school.includes('新埔') || school.includes('江翠')) {
-                city = '新北市';
-            } else if (fullPathStr.includes('桃園市')) {
-                city = '桃園市';
-            }
+            if (fullStr.includes('台北市') || fullStr.includes('臺北市') || fullStr.includes('建國中學') || fullStr.includes('北一女')) city = '台北市';
+            else if (fullStr.includes('基隆市')) city = '基隆市';
+            else if (fullStr.includes('桃園市')) city = '桃園市';
 
-            let grade = '國一';
-            if (fullPathStr.includes('7年級') || fullPathStr.includes('七年級') || fullPathStr.includes('國一')) grade = '國一';
-            else if (fullPathStr.includes('8年級') || fullPathStr.includes('八年級') || fullPathStr.includes('國二')) grade = '國二';
-            else if (fullPathStr.includes('9年級') || fullPathStr.includes('九年級') || fullPathStr.includes('國三')) grade = '國三';
-            else if (fullPathStr.includes('高一')) grade = '高一';
-            else if (fullPathStr.includes('高二')) grade = '高二';
-            else if (fullPathStr.includes('高三')) grade = '高三';
-
-            let semester = fullPathStr.includes('下學期') || fullPathStr.includes('下') ? '下學期' : '上學期';
-
-            // 從資料夾路徑或檔名辨識段考類別
-            let category = '第一次段考';
-            if (fullPathStr.includes('第二次段考') || fullPathStr.includes('段考2') || fullPathStr.includes('第2次段考')) {
-                category = '第二次段考';
-            } else if (fullPathStr.includes('第三次段考') || fullPathStr.includes('段考3') || fullPathStr.includes('第3次段考')) {
-                category = '第三次段考';
-            } else if (fullPathStr.includes('期末考') || fullPathStr.includes('期末')) {
-                category = '期末考';
-            } else if (fullPathStr.includes('第一次段考') || fullPathStr.includes('段考1') || fullPathStr.includes('第1次段考')) {
-                category = '第一次段考';
-            }
-
-            // 新增：從資料夾路徑與檔名自動辨識學年度 (支援 115學年, 115年, 114學年, 113學年...)
-            let year = '115';
-            const yearMatch = fullPathStr.match(/(\d{2,3})(?:學年|年)/);
-            if (yearMatch) {
-                year = yearMatch[1];
-            }
-
-            const subjects = ['數學', '國文', '英文', '英語', '理化', '自然', '社會', '歷史', '地理', '公民', '物理', '化學', '生物'];
-            let subject = '國文';
-            for (const sub of subjects) {
-                if (fileName.includes(sub)) {
-                    subject = (sub === '英語') ? '英文' : sub;
+            // 自動辨識學校
+            let school = '海山國中';
+            for (const seg of pathSegments) {
+                if (seg.includes('高中') || seg.includes('國中') || seg.includes('女中') || seg.includes('高職')) {
+                    school = seg;
                     break;
                 }
             }
 
-            return { school, city, grade, semester, category, year, subject };
+            // 自動辨識年級
+            let grade = '國一';
+            if (fullStr.includes('7年級') || fullStr.includes('國一') || fullStr.includes('七年級')) grade = '國一';
+            else if (fullStr.includes('8年級') || fullStr.includes('國二') || fullStr.includes('八年級')) grade = '國二';
+            else if (fullStr.includes('9年級') || fullStr.includes('國三') || fullStr.includes('九年級')) grade = '國三';
+            else if (fullStr.includes('高一')) grade = '高一';
+            else if (fullStr.includes('高二')) grade = '高二';
+            else if (fullStr.includes('高三')) grade = '高三';
+
+            // 自動辨識學期
+            let semester = '上學期';
+            if (fullStr.includes('下學期') || fullStr.includes('下')) semester = '下學期';
+
+            // 自動辨識段考類別
+            let category = '第一次段考';
+            if (fullStr.includes('第二次段考') || fullStr.includes('第二次')) category = '第二次段考';
+            else if (fullStr.includes('第三次段考') || fullStr.includes('第三次')) category = '第三次段考';
+            else if (fullStr.includes('期末考') || fullStr.includes('期末')) category = '期末考';
+
+            // 自動辨識學年度
+            let year = '115';
+            const yearMatch = fullStr.match(/(1\d{2})[學年]/);
+            if (yearMatch) year = yearMatch[1];
+
+            // 自動辨識科目
+            let subject = '國文';
+            const subjects = ['國文', '英文', '數學', '理化', '歷史', '地理', '公民', '物理', '化學', '生物', '地科', '社會', '自然'];
+            for (const sub of subjects) {
+                if (fullStr.includes(sub)) {
+                    subject = sub;
+                    break;
+                }
+            }
+
+            // 辨識檔案類別 (試題/解答/答案卷)
+            let fileType = 'question';
+            if (fileName.includes('解答') || fileName.includes('答案') && !fileName.includes('答案卷')) fileType = 'answerKey';
+            else if (fileName.includes('答案卷') || fileName.includes('答題卡')) fileType = 'answerSheet';
+
+            return { year, city, school, grade, semester, subject, category, fileType, file };
         }
 
-        // 將抓取到的 PDF 檔名與路徑進行整合分組 (打包 試題/解答/答案卷)
+        // 將 PDF 檔案分組為考卷項目
         function groupFilesIntoExams(files) {
-            const groups = {};
-
-            files.forEach(file => {
-                const info = parseFilenameToExamInfo(file);
-                const key = `${info.year}_${info.school}_${info.grade}_${info.semester}_${info.subject}_${info.category}`;
-
-                if (!groups[key]) {
-                    groups[key] = {
-                        id: file.id,
+            const map = {};
+            files.forEach(f => {
+                const info = parseFilenameToExamInfo(f);
+                const groupKey = `${info.year}_${info.school}_${info.grade}_${info.semester}_${info.subject}_${info.category}`;
+                if (!map[groupKey]) {
+                    map[groupKey] = {
+                        id: groupKey,
                         year: info.year,
                         city: info.city,
                         school: info.school,
@@ -476,50 +503,31 @@
                         files: {}
                     };
                 }
-
-                const fileUrl = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
-                const fileName = file.name;
-
-                if (fileName.includes('解答') || fileName.includes('答案')) {
-                    if (fileName.includes('答案卷') || fileName.includes('答題卡')) {
-                        groups[key].files.answerSheet = { name: fileName, url: fileUrl };
-                    } else {
-                        groups[key].files.answerKey = { name: fileName, url: fileUrl };
-                    }
-                } else {
-                    groups[key].files.question = { name: fileName, url: fileUrl };
-                }
+                map[groupKey].files[info.fileType] = { name: f.name, url: f.url };
             });
-
-            return Object.values(groups);
+            return Object.values(map);
         }
 
-        // 動態更新「學校名稱」下拉選單
-        function updateSchoolOptions() {
-            const selectedCity = citySelect.value;
-            const currentSelectedSchool = schoolSelect.value;
-
-            // 取得目前資料庫中不重複的學校清單
-            let schools = exams.map(e => ({ school: e.school, city: e.city }));
-            
-            if (selectedCity) {
-                schools = schools.filter(s => s.city === selectedCity);
+        // 顯示 / 隱藏載入狀態
+        function toggleLoading(show) {
+            if (show) {
+                examGrid.classList.add('hidden');
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
+                paginationContainer.classList.add('hidden');
+                loadingState.classList.remove('hidden');
+                loadingState.classList.add('flex');
+            } else {
+                loadingState.classList.add('hidden');
+                loadingState.classList.remove('flex');
+                examGrid.classList.remove('hidden');
             }
-
-            const uniqueSchools = [...new Set(schools.map(s => s.school))].sort();
-
-            schoolSelect.innerHTML = '<option value="">全部學校</option>';
-            uniqueSchools.forEach(sch => {
-                const opt = document.createElement('option');
-                opt.value = sch;
-                opt.textContent = sch;
-                if (sch === currentSelectedSchool) opt.selected = true;
-                schoolSelect.appendChild(opt);
-            });
         }
 
         // 渲染考卷列表 (橫向膠囊按鈕風格，支援一頁10筆)
         function renderExams() {
+            toggleLoading(false);
+
             const cityVal = citySelect.value;
             const schVal = schoolSelect.value;
             const grVal = gradeSelect.value;
@@ -821,10 +829,11 @@
         // 初始化載入
         window.addEventListener('DOMContentLoaded', async () => {
             updateSchoolOptions();
-            renderExams();
 
             const { apiKey, folderUrl } = loadSavedCredentials();
             if (apiKey && folderUrl) {
+                // 若已有憑證資訊，直接啟動全自動同步載入最新考卷
+                toggleLoading(true);
                 try {
                     const files = await scanFolderRecursively(folderUrl, apiKey);
                     if (files.length > 0) {
@@ -832,11 +841,16 @@
                         currentPage = 1;
                         updateSchoolOptions();
                         renderExams();
+                    } else {
+                        renderExams();
                     }
                 } catch (e) {
-                    // 自動背景同步失敗時僅在 Console 紀錄警告，不跳出警告視窗打擾使用者
-                    console.warn('自動同步讀取失敗（請確認雲端資料夾是否已設為公開，或 API Key 權限）：', e.message);
+                    console.warn('自動同步讀取失敗：', e.message);
+                    renderExams();
                 }
+            } else {
+                // 無設定時呈現預設範例資料
+                renderExams();
             }
         });
     </script>
