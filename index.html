@@ -402,6 +402,25 @@
 
             let semester = fullPathStr.includes('下學期') || fullPathStr.includes('下') ? '下學期' : '上學期';
 
+            // 從資料夾路徑或檔名辨識段考類別
+            let category = '第一次段考';
+            if (fullPathStr.includes('第二次段考') || fullPathStr.includes('段考2') || fullPathStr.includes('第2次段考')) {
+                category = '第二次段考';
+            } else if (fullPathStr.includes('第三次段考') || fullPathStr.includes('段考3') || fullPathStr.includes('第3次段考')) {
+                category = '第三次段考';
+            } else if (fullPathStr.includes('期末考') || fullPathStr.includes('期末')) {
+                category = '期末考';
+            } else if (fullPathStr.includes('第一次段考') || fullPathStr.includes('段考1') || fullPathStr.includes('第1次段考')) {
+                category = '第一次段考';
+            }
+
+            // 新增：從資料夾路徑與檔名自動辨識學年度 (支援 115學年, 115年, 114學年, 113學年...)
+            let year = '115';
+            const yearMatch = fullPathStr.match(/(\d{2,3})(?:學年|年)/);
+            if (yearMatch) {
+                year = yearMatch[1];
+            }
+
             const subjects = ['數學', '國文', '英文', '英語', '理化', '自然', '社會', '歷史', '地理', '公民', '物理', '化學', '生物'];
             let subject = '國文';
             for (const sub of subjects) {
@@ -411,11 +430,6 @@
                 }
             }
 
-            let category = '第一次段考';
-            if (fileName.includes('第二次段考') || fileName.includes('段考2')) category = '第二次段考';
-            else if (fileName.includes('第三次段考') || fileName.includes('段考3')) category = '第三次段考';
-            else if (fileName.includes('期末考') || fileName.includes('期末')) category = '期末考';
-
             let fileType = 'question';
             if (fileName.includes('解答') || fileName.includes('Ans')) {
                 fileType = 'answerKey';
@@ -424,10 +438,6 @@
             } else if (fileName.includes('試題卷') || fileName.includes('題目')) {
                 fileType = 'question';
             }
-
-            let year = '115';
-            const yearMatch = fileName.match(/(\d{2,3})學年/);
-            if (yearMatch) year = yearMatch[1];
 
             return {
                 examKey: `${school}_${grade}_${semester}_${subject}_${category}_${year}`,
