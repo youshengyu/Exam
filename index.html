@@ -16,6 +16,7 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .drag-active { border-color: #6366f1 !important; background-color: #eef2ff !important; }
     </style>
 </head>
 <body class="text-slate-800 min-h-screen flex flex-col relative">
@@ -33,10 +34,17 @@
                 </div>
             </div>
             
-            <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- 直接開啟雲端資料夾捷徑 -->
+                <button id="open-drive-shortcut" class="bg-white/15 hover:bg-white/25 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition duration-200 flex items-center space-x-2 border border-white/20 backdrop-blur-md" title="前往 Google Drive 雲端資料夾">
+                    <i class="fa-brands fa-google-drive text-amber-300 text-base"></i>
+                    <span class="hidden sm:inline">開啟雲端目錄</span>
+                </button>
+
+                <!-- 連結雲端資料夾與上傳設定 -->
                 <button id="open-cloud-btn" class="bg-indigo-500/40 hover:bg-indigo-500/60 text-white px-4 py-2 rounded-xl text-sm font-medium transition duration-200 flex items-center space-x-2 border border-indigo-400/30 backdrop-blur-md">
                     <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
-                    <span>連結雲端資料夾</span>
+                    <span>同步與上傳管理</span>
                 </button>
             </div>
         </div>
@@ -144,9 +152,15 @@
                 
                 <!-- 搜尋與統計列 -->
                 <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div class="relative w-full sm:w-96">
-                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                        <input type="text" id="search-input" placeholder="搜尋關鍵字 (如：112學年、建國中學...)" class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+                    <div class="relative w-full sm:w-96 flex items-center gap-3">
+                        <div class="flex items-center space-x-2 pl-1 shrink-0">
+                            <input type="checkbox" id="select-all-checkbox" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                            <label for="select-all-checkbox" class="text-xs font-semibold text-slate-600 cursor-pointer select-none">全選</label>
+                        </div>
+                        <div class="relative w-full">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" id="search-input" placeholder="搜尋關鍵字 (如：115學年、海山國中...)" class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+                        </div>
                     </div>
 
                     <div class="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-end">
@@ -172,7 +186,7 @@
                         <i class="fa-solid fa-folder-open text-2xl"></i>
                     </div>
                     <h3 class="font-bold text-slate-700 text-base mb-1">找不到符合條件的考古題</h3>
-                    <p class="text-xs text-slate-400 max-w-sm">請嘗試調整您的搜尋關鍵字或選單條件，或者點擊右上角連結 Google Drive 雲端資料夾。</p>
+                    <p class="text-xs text-slate-400 max-w-sm">請嘗試調整您的搜尋關鍵字或選單條件，或者點擊右上角「同步與上傳管理」確認雲端設定。</p>
                 </div>
             </section>
 
@@ -188,8 +202,8 @@
                     <i class="fa-solid fa-cloud text-lg"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-slate-800 text-base">連結 Google Drive 雲端</h3>
-                    <p class="text-xs text-slate-500">設定 API Key 與試卷根資料夾 ID</p>
+                    <h3 class="font-bold text-slate-800 text-base">雲端資料夾管理與同步</h3>
+                    <p class="text-xs text-slate-500">同步題庫與快速上傳考卷</p>
                 </div>
             </div>
             <button id="close-cloud-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg transition">
@@ -198,34 +212,80 @@
         </div>
 
         <div class="p-6 space-y-6 flex-grow overflow-y-auto custom-scrollbar">
-            <!-- 資訊提示框 -->
-            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700 leading-relaxed space-y-1.5">
-                <div class="font-semibold flex items-center gap-1.5 text-indigo-800">
-                    <i class="fa-solid fa-circle-info"></i> 自動記憶提示
+            
+            <!-- 快捷開啟 Google Drive 資料夾卡片 -->
+            <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-brands fa-google-drive text-amber-500 text-2xl"></i>
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-700">雲端資料夾捷徑</h4>
+                        <p class="text-[11px] text-slate-400">點擊直接前往雲端儲存庫目錄</p>
+                    </div>
                 </div>
-                <p>在此輸入的 API Key 與資料夾 ID 將會<b>自動記憶於您的瀏覽器中</b>，下次開啟網頁會自動載入，無需手動重複輸入。</p>
+                <a id="drive-direct-link" href="#" target="_blank" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-sm px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 pointer-events-none opacity-50">
+                    <span>前往雲端</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
             </div>
 
-            <!-- 欄位 1: API Key -->
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">
-                    1. Google Drive API Key <span class="text-red-500">*</span>
+            <!-- 拖曳上傳與檔名建議區域 -->
+            <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-700">
+                    <i class="fa-solid fa-cloud-arrow-up text-indigo-600 mr-1"></i> 上傳考卷 PDF 到雲端
                 </label>
-                <input type="password" id="api-key-input" placeholder="貼上 AIzaSy... 開頭的金鑰" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                <div id="drop-zone" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-2xl p-5 text-center bg-indigo-50/30 transition cursor-pointer flex flex-col items-center justify-center">
+                    <i class="fa-solid fa-file-pdf text-3xl text-indigo-400 mb-2"></i>
+                    <p class="text-xs font-bold text-indigo-900 mb-1">點擊開啟 Google Drive 上傳或拖曳檔案</p>
+                    <p class="text-[11px] text-slate-500">將 PDF 檔案上傳至對應學年/學校資料夾中</p>
+                    <input type="file" id="file-input" accept="application/pdf" multiple class="hidden">
+                </div>
+                
+                <!-- 檔名規範說明 -->
+                <div class="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-800 space-y-1">
+                    <div class="font-bold flex items-center gap-1">
+                        <i class="fa-regular fa-lightbulb text-amber-600"></i> 建議檔名命名格式：
+                    </div>
+                    <code class="block bg-amber-100/60 px-2 py-1 rounded text-amber-900 font-mono text-[10px] break-all">
+                        115學年_海山國中_國一_國文_上學期_第一次段考.pdf
+                    </code>
+                    <p class="text-slate-500 text-[10px]">系統會自動根據檔名解析年份、學校、科目與解答類別。</p>
+                </div>
             </div>
 
-            <!-- 欄位 2: Folder ID -->
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1.5">
-                    2. 試卷總資料夾 ID / 網址 <span class="text-red-500">*</span>
-                </label>
-                <input type="text" id="folder-url-input" placeholder="貼上 Google Drive 資料夾網址或 ID" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
-            </div>
+            <!-- API 金鑰與資料夾設定 -->
+            <div class="pt-4 border-t border-slate-100 space-y-4">
+                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-700 leading-relaxed space-y-1.5">
+                    <div class="font-semibold flex items-center gap-1.5 text-indigo-800">
+                        <i class="fa-solid fa-circle-info"></i> 自動記憶提示
+                    </div>
+                    <p>在此輸入的 API Key 與資料夾 ID 將會<b>自動記憶於您的瀏覽器中</b>，下次開啟網頁會自動載入。</p>
+                </div>
 
-            <button id="load-folder-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center justify-center space-x-2">
-                <i class="fa-solid fa-sync"></i>
-                <span>儲存並同步抓取</span>
-            </button>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                        1. Google Drive API Key <span class="text-red-500">*</span>
+                    </label>
+                    <input type="password" id="api-key-input" placeholder="貼上 AIzaSy... 開頭的金鑰" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                        2. 試卷總資料夾 ID / 網址 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="folder-url-input" placeholder="貼上 Google Drive 資料夾網址或 ID" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+
+                <!-- 快取狀態提示 -->
+                <div id="cache-status-info" class="hidden bg-slate-100 rounded-xl p-3 text-[11px] text-slate-600 flex items-center justify-between">
+                    <span id="cache-time-text">已載入快取資料</span>
+                    <button id="clear-cache-btn" class="text-indigo-600 font-bold hover:underline">清除快取</button>
+                </div>
+
+                <button id="load-folder-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-sync"></i>
+                    <span>儲存並同步抓取</span>
+                </button>
+            </div>
         </div>
     </aside>
 
@@ -238,6 +298,16 @@
                     <h3 id="modal-title" class="font-bold text-slate-800 text-sm sm:text-base truncate max-w-md">試卷預覽</h3>
                 </div>
                 <div class="flex items-center space-x-2">
+                    <!-- 防護模式切換鈕 -->
+                    <button id="toggle-protection-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1" title="切換預覽防護模式">
+                        <i id="protection-icon" class="fa-solid fa-shield-halved text-slate-500"></i>
+                        <span id="protection-text">防護: 關閉</span>
+                    </button>
+                    <!-- 直接列印按鈕 -->
+                    <button id="modal-print-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1">
+                        <i class="fa-solid fa-print"></i>
+                        <span>直接列印</span>
+                    </button>
                     <a id="modal-download-btn" href="#" target="_blank" download class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1">
                         <i class="fa-solid fa-download"></i>
                         <span>下載 PDF</span>
@@ -247,8 +317,65 @@
                     </button>
                 </div>
             </div>
-            <div class="flex-grow bg-slate-200 relative">
+            <div id="preview-container" class="flex-grow bg-slate-200 relative select-none">
                 <iframe id="pdf-frame" class="w-full h-full border-0" src="about:blank"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批次操作底部懸浮工具列 -->
+    <div id="batch-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white px-6 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md border border-slate-700/50 flex items-center justify-between gap-6 z-40 transform translate-y-28 transition-transform duration-300 w-11/12 max-w-2xl">
+        <div class="flex items-center space-x-3">
+            <span id="batch-count-badge" class="bg-indigo-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">0</span>
+            <span class="text-sm font-medium text-slate-200">已選取試卷</span>
+        </div>
+        <div class="flex items-center space-x-2.5">
+            <button id="batch-download-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-md">
+                <i class="fa-solid fa-file-arrow-down"></i>
+                <span>批次開啟下載</span>
+            </button>
+            <button id="batch-print-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-md">
+                <i class="fa-solid fa-print"></i>
+                <span>產生列印清單</span>
+            </button>
+            <button id="batch-clear-btn" class="text-slate-400 hover:text-white px-2 py-1 text-xs transition">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 批次列印清單 Modal 彈窗 -->
+    <div id="print-list-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center space-x-2.5">
+                    <div class="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                        <i class="fa-solid fa-print"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">批次列印清單</h3>
+                        <p class="text-xs text-slate-500">已彙整勾選之試題卷與解答</p>
+                    </div>
+                </div>
+                <button id="close-print-modal-btn" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-grow space-y-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center justify-between">
+                    <span><i class="fa-solid fa-circle-info mr-1"></i> 提示：可點擊下方按鈕一次開啟所有試卷分頁進行列印。</span>
+                    <button id="copy-links-btn" class="text-indigo-600 hover:underline font-bold shrink-0 ml-2">複製所有連結</button>
+                </div>
+                <div id="print-items-container" class="space-y-3">
+                    <!-- 列印項目內容區 -->
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                <span id="print-total-files" class="text-xs text-slate-500 font-medium">共 0 個 PDF 檔案</span>
+                <button id="open-all-print-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 shadow-lg shadow-emerald-600/20">
+                    <i class="fa-solid fa-external-link-alt"></i>
+                    <span>一次開啟所有選取檔案</span>
+                </button>
             </div>
         </div>
     </div>
@@ -262,14 +389,13 @@
                 year: '115',
                 city: '新北市',
                 school: '海山國中',
-                grade: '國一',
+                grade: '國三',
                 semester: '上學期',
-                subject: '國文',
+                subject: '社會',
                 category: '第一次段考',
                 files: {
-                    question: { name: '115學年_海山國中_國一_國文_上學期_第一次段考.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
-                    answerKey: { name: '115學年_海山國中_國一_國文_上學期_第一次段考_解答.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
-                    answerSheet: { name: '115學年_海山國中_國一_國文_上學期_第一次段考_答案卷.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
+                    question: { name: '115學年_海山國中_國三_社會_上學期_第一次段考.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
+                    answerKey: { name: '115學年_海山國中_國三_社會_上學期_第一次段考_解答.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
                 }
             },
             {
@@ -277,14 +403,27 @@
                 year: '115',
                 city: '新北市',
                 school: '海山國中',
-                grade: '國一',
+                grade: '國三',
                 semester: '上學期',
-                subject: '數學',
+                subject: '英文',
                 category: '第一次段考',
                 files: {
-                    question: { name: '115學年_海山國中_國一_數學_上學期_第一次段考.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
-                    answerKey: { name: '115學年_海山國中_國一_數學_上學期_第一次段考_解答.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
-                    answerSheet: { name: '115學年_海山國中_國一_數學_上學期_第一次段考_答案卷.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
+                    question: { name: '115學年_海山國中_國三_英文_上學期_第一次段考.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
+                    answerKey: { name: '115學年_海山國中_國三_英文_上學期_第一次段考_解答.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
+                }
+            },
+            {
+                id: 'demo-3',
+                year: '115',
+                city: '新北市',
+                school: '海山國中',
+                grade: '國三',
+                semester: '上學期',
+                subject: '國文',
+                category: '第一次段考',
+                files: {
+                    question: { name: '115學年_海山國中_國三_國文_上學期_第一次段考.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
+                    answerKey: { name: '115學年_海山國中_國三_國文_上學期_第一次段考_解答.pdf', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
                 }
             }
         ];
@@ -303,7 +442,25 @@
         const emptyState = document.getElementById('empty-state');
         const resetBtn = document.getElementById('reset-btn');
 
-        // Cloud Sidebar DOM 宣告
+        // 批次功能 DOM
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+        const batchActionBar = document.getElementById('batch-action-bar');
+        const batchCountBadge = document.getElementById('batch-count-badge');
+        const batchDownloadBtn = document.getElementById('batch-download-btn');
+        const batchPrintBtn = document.getElementById('batch-print-btn');
+        const batchClearBtn = document.getElementById('batch-clear-btn');
+
+        // 批次列印 Modal DOM
+        const printListModal = document.getElementById('print-list-modal');
+        const closePrintModalBtn = document.getElementById('close-print-modal-btn');
+        const printItemsContainer = document.getElementById('print-items-container');
+        const printTotalFiles = document.getElementById('print-total-files');
+        const openAllPrintBtn = document.getElementById('open-all-print-btn');
+        const copyLinksBtn = document.getElementById('copy-links-btn');
+
+        let selectedExamKeys = new Set();
+        let currentFilteredExams = [];
+
         const openCloudBtn = document.getElementById('open-cloud-btn');
         const closeCloudBtn = document.getElementById('close-cloud-btn');
         const cloudSidebar = document.getElementById('cloud-sidebar');
@@ -311,13 +468,31 @@
         const apiKeyInput = document.getElementById('api-key-input');
         const folderUrlInput = document.getElementById('folder-url-input');
         const loadFolderBtn = document.getElementById('load-folder-btn');
+        const openDriveShortcut = document.getElementById('open-drive-shortcut');
+        const driveDirectLink = document.getElementById('drive-direct-link');
+        
+        // 快取 DOM 宣告
+        const cacheStatusInfo = document.getElementById('cache-status-info');
+        const cacheTimeText = document.getElementById('cache-time-text');
+        const clearCacheBtn = document.getElementById('clear-cache-btn');
+
+        // 拖曳上傳 DOM
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
 
         // Preview Modal DOM 宣告
         const previewModal = document.getElementById('preview-modal');
         const closeModalBtn = document.getElementById('close-modal-btn');
         const modalTitle = document.getElementById('modal-title');
         const modalDownloadBtn = document.getElementById('modal-download-btn');
+        const modalPrintBtn = document.getElementById('modal-print-btn');
+        const toggleProtectionBtn = document.getElementById('toggle-protection-btn');
+        const protectionIcon = document.getElementById('protection-icon');
+        const protectionText = document.getElementById('protection-text');
+        const previewContainer = document.getElementById('preview-container');
         const pdfFrame = document.getElementById('pdf-frame');
+
+        let isProtectionEnabled = false;
 
         // 提取乾淨的 Folder ID
         function extractFolderId(inputStr) {
@@ -326,42 +501,183 @@
             return match ? match[1] : inputStr.trim();
         }
 
+        function getDriveFolderUrl(folderId) {
+            return folderId ? `https://drive.google.com/drive/folders/${folderId}` : '#';
+        }
+
+        // 開啟預覽視窗
+        function openPreview(url, title) {
+            if (!previewModal || !modalTitle || !pdfFrame) return;
+            modalTitle.textContent = title;
+            if (modalDownloadBtn) modalDownloadBtn.href = url;
+            
+            let embedUrl = url;
+            if (url && url.includes('drive.google.com')) {
+                embedUrl = url.replace(/\/view.*$/, '/preview');
+            }
+            
+            pdfFrame.src = embedUrl;
+            previewModal.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        // 直接列印按鈕功能
+        modalPrintBtn?.addEventListener('click', () => {
+            try {
+                if (pdfFrame && pdfFrame.contentWindow) {
+                    pdfFrame.contentWindow.focus();
+                    pdfFrame.contentWindow.print();
+                } else {
+                    window.open(pdfFrame.src, '_blank')?.print();
+                }
+            } catch (e) {
+                // 若 iframe 受到同源政策 (CORS) 限制，改在新視窗開啟並提示列印
+                const win = window.open(pdfFrame.src, '_blank');
+                if (win) {
+                    win.onload = () => win.print();
+                }
+            }
+        });
+
+        // 切換預覽防護模式
+        toggleProtectionBtn?.addEventListener('click', () => {
+            isProtectionEnabled = !isProtectionEnabled;
+            if (isProtectionEnabled) {
+                protectionText.textContent = '防護: 開啟';
+                protectionIcon.className = 'fa-solid fa-lock text-emerald-600';
+                toggleProtectionBtn.className = 'bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1 border border-emerald-300';
+                previewContainer.classList.add('pointer-events-none'); // 禁用 iframe 右鍵/選取
+            } else {
+                protectionText.textContent = '防護: 關閉';
+                protectionIcon.className = 'fa-solid fa-shield-halved text-slate-500';
+                toggleProtectionBtn.className = 'bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-1';
+                previewContainer.classList.remove('pointer-events-none');
+            }
+        });
+
+        // 關閉預覽視窗
+        function closePreview() {
+            if (!previewModal || !pdfFrame) return;
+            previewModal.classList.add('opacity-0', 'pointer-events-none');
+            pdfFrame.src = 'about:blank';
+        }
+
+        // 側邊抽屜開關
+        function toggleSidebar(show) {
+            if (!cloudOverlay || !cloudSidebar) return;
+            if (show) {
+                cloudOverlay.classList.remove('opacity-0', 'pointer-events-none');
+                cloudSidebar.classList.remove('translate-x-full');
+            } else {
+                cloudOverlay.classList.add('opacity-0', 'pointer-events-none');
+                cloudSidebar.classList.add('translate-x-full');
+            }
+        }
+
+        // 更新頂部與側邊欄的 Google Drive 捷徑按鈕
+        function updateDriveShortcutLinks(folderId) {
+            const cleanId = extractFolderId(folderId);
+            const fullUrl = getDriveFolderUrl(cleanId);
+            
+            if (cleanId) {
+                driveDirectLink.href = fullUrl;
+                driveDirectLink.classList.remove('pointer-events-none', 'opacity-50');
+            } else {
+                driveDirectLink.href = '#';
+                driveDirectLink.classList.add('pointer-events-none', 'opacity-50');
+            }
+        }
+
         // 讀取/儲存 LocalStorage 設定
         function loadSavedCredentials() {
             const apiKey = localStorage.getItem('exam_sys_api_key') || '';
             const folderUrl = localStorage.getItem('exam_sys_folder_url') || '';
             if (apiKey) apiKeyInput.value = apiKey;
-            if (folderUrl) folderUrlInput.value = folderUrl;
+            if (folderUrl) {
+                folderUrlInput.value = folderUrl;
+                updateDriveShortcutLinks(folderUrl);
+            }
             return { apiKey, folderUrl };
         }
 
-        // 遞迴掃描 Google Drive 資料夾
+        // 快取管理功能
+        const CACHE_EXPIRE_TIME = 30 * 60 * 1000; // 30 分鐘快取過期時間
+
+        function saveExamsToCache(data) {
+            try {
+                const cacheData = {
+                    timestamp: Date.now(),
+                    exams: data
+                };
+                localStorage.setItem('exam_sys_cached_data', JSON.stringify(cacheData));
+                updateCacheStatusUI(cacheData.timestamp);
+            } catch (e) {
+                console.warn('快取儲存失敗（可能超出容量限制）：', e);
+            }
+        }
+
+        function loadExamsFromCache() {
+            try {
+                const raw = localStorage.getItem('exam_sys_cached_data');
+                if (!raw) return null;
+                const cacheData = JSON.parse(raw);
+                const isExpired = Date.now() - cacheData.timestamp > CACHE_EXPIRE_TIME;
+                updateCacheStatusUI(cacheData.timestamp, isExpired);
+                return {
+                    exams: cacheData.exams,
+                    isExpired
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function updateCacheStatusUI(timestamp, isExpired = false) {
+            if (!cacheStatusInfo || !cacheTimeText) return;
+            const dateStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            cacheTimeText.textContent = `上次同步時間: ${dateStr} ${isExpired ? '(快取已過期)' : '(快取中)'}`;
+            cacheStatusInfo.classList.remove('hidden');
+        }
+
+        clearCacheBtn?.addEventListener('click', () => {
+            localStorage.removeItem('exam_sys_cached_data');
+            cacheStatusInfo?.classList.add('hidden');
+            alert('已成功清除本地快取！請點擊「儲存並同步抓取」重新取得最新資料。');
+        });
+
+        // 遞迴掃描 Google Drive 資料夾 (包含分頁 NextPageToken 處理)
         async function scanFolderRecursively(rootFolderInput, apiKey) {
             const rootId = extractFolderId(rootFolderInput);
             const allFiles = [];
 
             async function traverse(folderId, path = []) {
-                const query = `'${folderId}' in parents and trashed = false`;
-                const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=1000&key=${apiKey}`;
-                
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error.message || 'API 請求失敗');
-                }
-
-                const items = data.files || [];
-                for (const item of items) {
-                    if (item.mimeType === 'application/vnd.google-apps.folder') {
-                        await traverse(item.id, [...path, item.name]);
-                    } else if (item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf')) {
-                        allFiles.push({
-                            ...item,
-                            path: path
-                        });
+                let pageToken = null;
+                do {
+                    const query = `'${folderId}' in parents and trashed = false`;
+                    let url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=nextPageToken,files(id,name,mimeType,webViewLink,webContentLink)&pageSize=1000&key=${apiKey}`;
+                    if (pageToken) {
+                        url += `&pageToken=${pageToken}`;
                     }
-                }
+
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.error) {
+                        throw new Error(data.error.message || 'API 請求失敗');
+                    }
+
+                    const items = data.files || [];
+                    for (const item of items) {
+                        if (item.mimeType === 'application/vnd.google-apps.folder') {
+                            await traverse(item.id, [...path, item.name]);
+                        } else if (item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf')) {
+                            allFiles.push({
+                                ...item,
+                                path: path
+                            });
+                        }
+                    }
+                    pageToken = data.nextPageToken;
+                } while (pageToken);
             }
 
             await traverse(rootId, []);
@@ -370,7 +686,10 @@
 
         // 解析檔名與資料夾路徑
         function parseFilenameToExamInfo(fileItem) {
-            const fileName = fileItem.name;
+            let fileName = fileItem.name;
+            // 清理 Google 自動附加的「 的副本」
+            fileName = fileName.replace(/ 的副本/g, '');
+
             const pathArr = fileItem.path || [];
             const fullPathStr = pathArr.join('/') + '/' + fileName;
 
@@ -382,7 +701,6 @@
                 }
             }
 
-            // 根據資料夾與檔名判斷縣市
             let city = '新北市';
             if (fullPathStr.includes('台北市') || fullPathStr.includes('臺北市') || school.includes('建國中學') || school.includes('北一女') || school.includes('中山女高') || school.includes('成功高中') || school.includes('松山高中') || school.includes('金華國中') || school.includes('中正國中')) {
                 city = '台北市';
@@ -393,9 +711,9 @@
             }
 
             let grade = '國一';
-            if (fullPathStr.includes('7年級') || fullPathStr.includes('七年級') || fullPathStr.includes('國一')) grade = '國一';
-            else if (fullPathStr.includes('8年級') || fullPathStr.includes('八年級') || fullPathStr.includes('國二')) grade = '國二';
-            else if (fullPathStr.includes('9年級') || fullPathStr.includes('九年級') || fullPathStr.includes('國三')) grade = '國三';
+            if (fullPathStr.includes('7年級') || fullPathStr.includes('七年級') || fullPathStr.includes('國一') || fullPathStr.includes('7國文') || fullPathStr.includes('7數學') || fullPathStr.includes('7英語') || fullPathStr.includes('7社會') || fullPathStr.includes('7自然')) grade = '國一';
+            else if (fullPathStr.includes('8年級') || fullPathStr.includes('八年級') || fullPathStr.includes('國二') || fullPathStr.includes('8國文') || fullPathStr.includes('8數學') || fullPathStr.includes('8英語') || fullPathStr.includes('8理化') || fullPathStr.includes('8社會')) grade = '國二';
+            else if (fullPathStr.includes('9年級') || fullPathStr.includes('九年級') || fullPathStr.includes('國三') || fullPathStr.includes('9國文') || fullPathStr.includes('9數學') || fullPathStr.includes('9英語') || fullPathStr.includes('9理化') || fullPathStr.includes('9社會')) grade = '國三';
             else if (fullPathStr.includes('高一')) grade = '高一';
             else if (fullPathStr.includes('高二')) grade = '高二';
             else if (fullPathStr.includes('高三')) grade = '高三';
@@ -412,9 +730,10 @@
             }
 
             let category = '第一次段考';
-            if (fileName.includes('第二次段考') || fileName.includes('段考2')) category = '第二次段考';
-            else if (fileName.includes('第三次段考') || fileName.includes('段考3')) category = '第三次段考';
-            else if (fileName.includes('期末考') || fileName.includes('期末')) category = '期末考';
+            if (fullPathStr.includes('第二次段考') || fileName.includes('段考2')) category = '第二次段考';
+            else if (fullPathStr.includes('第三次段考') || fileName.includes('段考3')) category = '第三次段考';
+            else if (fullPathStr.includes('期末考') || fileName.includes('期末')) category = '期末考';
+            else if (fullPathStr.includes('第一次段考') || fileName.includes('段考1')) category = '第一次段考';
 
             let fileType = 'question';
             if (fileName.includes('解答') || fileName.includes('Ans')) {
@@ -426,7 +745,7 @@
             }
 
             let year = '115';
-            const yearMatch = fileName.match(/(\d{2,3})學年/);
+            const yearMatch = fileName.match(/(\d{2,3})(?:學年|學年度)/) || fullPathStr.match(/(\d{2,3})(?:學年|學年度)/);
             if (yearMatch) year = yearMatch[1];
 
             return {
@@ -476,7 +795,6 @@
             const currentSelected = schoolSelect.value;
             const selectedCity = citySelect ? citySelect.value : '';
             
-            // 如果選了特定縣市，只列出該縣市的學校
             const filteredExams = selectedCity ? exams.filter(e => e.city === selectedCity) : exams;
             const schools = [...new Set(filteredExams.map(e => e.school))].filter(Boolean);
 
@@ -490,7 +808,30 @@
             });
         }
 
-        // 渲染考卷列表 (橫向膠囊按鈕風格)
+        // 更新批次懸浮列 UI
+        function updateBatchUI() {
+            const count = selectedExamKeys.size;
+            batchCountBadge.textContent = count;
+            
+            if (count > 0) {
+                batchActionBar.classList.remove('translate-y-28');
+            } else {
+                batchActionBar.classList.add('translate-y-28');
+            }
+
+            if (currentFilteredExams.length > 0 && selectedExamKeys.size === currentFilteredExams.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedExamKeys.size > 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+        }
+
+        // 渲染考卷列表
         function renderExams() {
             const cityVal = citySelect.value;
             const schVal = schoolSelect.value;
@@ -501,7 +842,7 @@
             const searchVal = searchInput.value.trim().toLowerCase();
             const sortVal = sortSelect.value;
 
-            let filtered = exams.filter(item => {
+            currentFilteredExams = exams.filter(item => {
                 if (cityVal && item.city !== cityVal) return false;
                 if (schVal && item.school !== schVal) return false;
                 if (grVal && item.grade !== grVal) return false;
@@ -516,62 +857,65 @@
                 return true;
             });
 
-            // 排序
-            filtered.sort((a, b) => {
+            currentFilteredExams.sort((a, b) => {
                 return sortVal === 'newest' ? parseInt(b.year) - parseInt(a.year) : parseInt(a.year) - parseInt(b.year);
             });
 
-            countSpan.textContent = filtered.length;
+            countSpan.textContent = currentFilteredExams.length;
             examGrid.innerHTML = '';
 
-            if (filtered.length === 0) {
+            if (currentFilteredExams.length === 0) {
                 emptyState.classList.remove('hidden');
                 emptyState.classList.add('flex');
             } else {
                 emptyState.classList.add('hidden');
                 emptyState.classList.remove('flex');
 
-                filtered.forEach(item => {
+                currentFilteredExams.forEach(item => {
                     const card = document.createElement('div');
-                    card.className = 'bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:shadow-md transition duration-200 flex flex-col md:flex-row md:items-center justify-between gap-6';
+                    const isChecked = selectedExamKeys.has(item.id);
+                    card.className = `bg-white rounded-2xl p-6 shadow-sm border ${isChecked ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200/80'} hover:shadow-md transition duration-200 flex flex-col md:flex-row md:items-center justify-between gap-6`;
 
                     const qFile = item.files.question;
                     const aKeyFile = item.files.answerKey;
                     const aSheetFile = item.files.answerSheet;
 
                     card.innerHTML = `
-                        <!-- 左側內容 -->
-                        <div class="space-y-3">
-                            <!-- 上方膠囊標籤列 -->
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="px-3 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100/80">
-                                    ${item.year}學年
-                                </span>
-                                <span class="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">
-                                    ${item.city || '新北市'}
-                                </span>
-                                <span class="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-medium">
-                                    ${item.grade}
-                                </span>
-                                <span class="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium">
-                                    ${item.subject}
-                                </span>
-                            </div>
+                        <!-- 左側內容與勾選框 -->
+                        <div class="flex items-start space-x-4">
+                            <input type="checkbox" class="exam-card-checkbox mt-1.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer shrink-0" data-id="${item.id}" ${isChecked ? 'checked' : ''}>
+                            <div class="space-y-3">
+                                <!-- 上方膠囊標籤列 -->
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="px-3 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100/80">
+                                        ${item.year}學年
+                                    </span>
+                                    <span class="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">
+                                        ${item.city || '新北市'}
+                                    </span>
+                                    <span class="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-md text-xs font-medium">
+                                        ${item.grade}
+                                    </span>
+                                    <span class="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium">
+                                        ${item.subject}
+                                    </span>
+                                </div>
 
-                            <!-- 主標題 (包含學校 - 學期 年級 科目 類別) -->
-                            <h3 class="text-xl font-bold text-slate-800 tracking-tight">
-                                ${item.school} - ${item.semester} ${item.grade} ${item.subject} ${item.category}
-                            </h3>
+                                <!-- 主標題 -->
+                                <h3 class="text-xl font-bold text-slate-800 tracking-tight">
+                                    ${item.school} - ${item.semester} ${item.grade} ${item.subject} ${item.category}
+                                </h3>
 
-                            <!-- 下方狀態徽章列 -->
-                            <div class="flex flex-wrap gap-2 text-xs">
-                                ${qFile ? `<span class="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-1.5 border border-indigo-100/60 font-medium"><i class="fa-regular fa-file-pdf text-indigo-500"></i> 包含試題卷</span>` : ''}
-                                ${aKeyFile ? `<span class="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg flex items-center gap-1.5 border border-emerald-100/60 font-medium"><i class="fa-solid fa-circle-check text-emerald-500"></i> 包含解答</span>` : ''}
-                                ${aSheetFile ? `<span class="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg flex items-center gap-1.5 border border-amber-100/60 font-medium"><i class="fa-regular fa-copy text-amber-500"></i> 包含答案卷</span>` : ''}
+                                <!-- 下方狀態徽章列 -->
+                                <div class="flex flex-wrap gap-2 text-xs">
+                                    ${qFile ? `<span class="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-1.5 border border-indigo-100/60 font-medium"><i class="fa-regular fa-file-pdf text-indigo-500"></i> 包含試題卷</span>` : ''}
+                                    ${aKeyFile ? `<span class="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg flex items-center gap-1.5 border border-emerald-100/60 font-medium"><i class="fa-solid fa-circle-check text-emerald-500"></i> 包含解答</span>` : ''}
+                                    ${aSheetFile ? `<span class="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-lg flex items-center gap-1.5 border border-amber-100/60 font-medium"><i class="fa-regular fa-copy text-amber-500"></i> 包含答案卷</span>` : ''}
+                                </div>
                             </div>
                         </div>
 
-                        <!-- 右側固定三欄網格按鈕群 (確保跨卡片垂直對齊) -->
+                        <!-- 右側按鈕組 -->
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0 w-full md:w-auto items-center justify-end">
                             <div class="w-[150px] flex justify-end">
                                 ${qFile ? `
@@ -615,49 +959,167 @@
                     `;
                     examGrid.appendChild(card);
                 });
+
+                // 綁定個別 Checkbox 事件
+                document.querySelectorAll('.exam-card-checkbox').forEach(cb => {
+                    cb.addEventListener('change', (e) => {
+                        const id = e.target.getAttribute('data-id');
+                        if (e.target.checked) {
+                            selectedExamKeys.add(id);
+                        } else {
+                            selectedExamKeys.delete(id);
+                        }
+                        renderExams();
+                        updateBatchUI();
+                    });
+                });
             }
+            updateBatchUI();
         }
 
-        // 開啟預覽視窗
-        function openPreview(url, title) {
-            modalTitle.textContent = title;
-            modalDownloadBtn.href = url;
-            
-            // 轉換 Google Drive 預覽網址
-            let embedUrl = url;
-            if (url && url.includes('drive.google.com')) {
-                embedUrl = url.replace(/\/view.*$/, '/preview');
-            }
-            
-            pdfFrame.src = embedUrl;
-            previewModal.classList.remove('opacity-0', 'pointer-events-none');
-        }
-
-        // 關閉預覽視窗
-        function closePreview() {
-            previewModal.classList.add('opacity-0', 'pointer-events-none');
-            pdfFrame.src = 'about:blank';
-        }
-
-        // 側邊抽屜開關
-        function toggleSidebar(show) {
-            if (show) {
-                cloudOverlay.classList.remove('opacity-0', 'pointer-events-none');
-                cloudSidebar.classList.remove('translate-x-full');
+        // 綁定事件監聽器
+        openCloudBtn?.addEventListener('click', () => toggleSidebar(true));
+        closeCloudBtn?.addEventListener('click', () => toggleSidebar(false));
+        cloudOverlay?.addEventListener('click', () => toggleSidebar(false));
+        closeModalBtn?.addEventListener('click', closePreview);
+        openDriveShortcut?.addEventListener('click', () => {
+            const folderUrl = folderUrlInput?.value.trim();
+            const cleanId = extractFolderId(folderUrl);
+            if (cleanId) {
+                window.open(getDriveFolderUrl(cleanId), '_blank');
             } else {
-                cloudOverlay.classList.add('opacity-0', 'pointer-events-none');
-                cloudSidebar.classList.add('translate-x-full');
+                toggleSidebar(true);
             }
+        });
+
+        // 拖曳與上傳事件
+        if (dropZone) {
+            dropZone.addEventListener('click', () => fileInput?.click());
+            ['dragenter', 'dragover'].forEach(name => {
+                dropZone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('drag-active');
+                });
+            });
+            ['dragleave', 'drop'].forEach(name => {
+                dropZone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('drag-active');
+                });
+            });
+            dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const cleanId = extractFolderId(folderUrlInput?.value);
+                    if (cleanId) {
+                        alert(`已接收 ${files.length} 個檔案！即將開啟雲端頁面進行拖曳上傳。`);
+                        window.open(getDriveFolderUrl(cleanId), '_blank');
+                    } else {
+                        alert('請先填寫雲端資料夾 ID。');
+                    }
+                }
+            });
         }
 
-        // 事件監聽綁定
-        openCloudBtn.addEventListener('click', () => toggleSidebar(true));
-        closeCloudBtn.addEventListener('click', () => toggleSidebar(false));
-        cloudOverlay.addEventListener('click', () => toggleSidebar(false));
-        closeModalBtn.addEventListener('click', closePreview);
+        // 全選按鈕事件
+        selectAllCheckbox?.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                currentFilteredExams.forEach(item => selectedExamKeys.add(item.id));
+            } else {
+                selectedExamKeys.clear();
+            }
+            renderExams();
+            updateBatchUI();
+        });
+
+        // 清除選取
+        batchClearBtn?.addEventListener('click', () => {
+            selectedExamKeys.clear();
+            renderExams();
+            updateBatchUI();
+        });
+
+        // 批次開啟下載
+        batchDownloadBtn?.addEventListener('click', () => {
+            if (selectedExamKeys.size === 0) return;
+            let openedCount = 0;
+            exams.forEach(item => {
+                if (selectedExamKeys.has(item.id)) {
+                    Object.values(item.files).forEach(f => {
+                        if (f && f.url) {
+                            window.open(f.url, '_blank');
+                            openedCount++;
+                        }
+                    });
+                }
+            });
+            alert(`已嘗試在新分頁中開啟 ${openedCount} 個檔案進行下載！`);
+        });
+
+        // 產生批次列印清單 Modal
+        batchPrintBtn?.addEventListener('click', () => {
+            if (selectedExamKeys.size === 0) return;
+            printItemsContainer.innerHTML = '';
+            let totalFiles = 0;
+            const printUrls = [];
+
+            exams.forEach(item => {
+                if (selectedExamKeys.has(item.id)) {
+                    const el = document.createElement('div');
+                    el.className = 'p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2';
+                    
+                    let filesHtml = '';
+                    Object.entries(item.files).forEach(([type, f]) => {
+                        if (f && f.url) {
+                            totalFiles++;
+                            printUrls.push(f.url);
+                            const typeName = type === 'question' ? '試題' : type === 'answerKey' ? '解答' : '答案卷';
+                            const badgeColor = type === 'question' ? 'bg-indigo-100 text-indigo-700' : type === 'answerKey' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                            filesHtml += `
+                                <a href="${f.url}" target="_blank" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 rounded-lg text-xs font-medium text-slate-700 transition">
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded ${badgeColor} font-bold">${typeName}</span>
+                                    <span class="truncate max-w-[200px]">${f.name}</span>
+                                    <i class="fa-solid fa-external-link-alt text-[10px] text-slate-400"></i>
+                                </a>
+                            `;
+                        }
+                    });
+
+                    el.innerHTML = `
+                        <div class="font-bold text-xs text-slate-800">${item.school} - ${item.semester} ${item.grade} ${item.subject} ${item.category}</div>
+                        <div class="flex flex-wrap gap-2">${filesHtml}</div>
+                    `;
+                    printItemsContainer.appendChild(el);
+                }
+            });
+
+            printTotalFiles.textContent = `共 ${totalFiles} 個 PDF 檔案`;
+            printListModal.classList.remove('opacity-0', 'pointer-events-none');
+
+            // 複製連結按鈕
+            copyLinksBtn.onclick = () => {
+                const text = printUrls.join('\n');
+                const tempInput = document.createElement('textarea');
+                tempInput.value = text;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                alert('已成功複製所有 PDF 下載連結至剪貼簿！');
+            };
+
+            // 一次開啟所有檔案
+            openAllPrintBtn.onclick = () => {
+                printUrls.forEach(url => window.open(url, '_blank'));
+            };
+        });
+
+        closePrintModalBtn?.addEventListener('click', () => {
+            printListModal.classList.add('opacity-0', 'pointer-events-none');
+        });
 
         // 重設篩選
-        resetBtn.addEventListener('click', () => {
+        resetBtn?.addEventListener('click', () => {
             citySelect.value = '';
             schoolSelect.value = '';
             gradeSelect.value = '';
@@ -666,24 +1128,23 @@
             categorySelect.value = '';
             searchInput.value = '';
             sortSelect.value = 'newest';
+            selectedExamKeys.clear();
             updateSchoolOptions();
             renderExams();
         });
 
-        // 當縣市選單變更時，同時更新學校清單並重新過濾
-        citySelect.addEventListener('change', () => {
+        citySelect?.addEventListener('change', () => {
             updateSchoolOptions();
             renderExams();
         });
 
-        // 監聽其他篩選變更
         [schoolSelect, gradeSelect, semesterSelect, subjectSelect, categorySelect, sortSelect].forEach(select => {
-            select.addEventListener('change', renderExams);
+            select?.addEventListener('change', renderExams);
         });
-        searchInput.addEventListener('input', renderExams);
+        searchInput?.addEventListener('input', renderExams);
 
-        // 儲存並同步按鈕邏輯
-        loadFolderBtn.addEventListener('click', async () => {
+        // 同步抓取 Google Drive 資料夾
+        loadFolderBtn?.addEventListener('click', async () => {
             const apiKey = apiKeyInput.value.trim();
             const folderUrl = folderUrlInput.value.trim();
 
@@ -692,43 +1153,57 @@
                 return;
             }
 
-            // 儲存至 localStorage
             localStorage.setItem('exam_sys_api_key', apiKey);
             localStorage.setItem('exam_sys_folder_url', folderUrl);
+            updateDriveShortcutLinks(folderUrl);
 
             loadFolderBtn.disabled = true;
-            loadFolderBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>遞迴同步讀取中...</span>`;
+            loadFolderBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>同步中...</span>`;
 
             try {
                 const files = await scanFolderRecursively(folderUrl, apiKey);
                 if (files.length === 0) {
-                    alert('資料夾掃描成功，但未找到任何 PDF 檔案！');
+                    alert('資料夾掃描完成，未找到任何 PDF 檔案！');
                 } else {
                     exams = groupFilesIntoExams(files);
+                    saveExamsToCache(exams); // 寫入快取
+                    selectedExamKeys.clear();
                     updateSchoolOptions();
                     renderExams();
                     toggleSidebar(false);
-                    alert(`成功讀取並整合出 ${exams.length} 個考卷項目！`);
+                    alert(`成功讀取並整合出 ${exams.length} 個考卷項目！已寫入本地快取。`);
                 }
             } catch (err) {
-                alert(`讀取雲端資料夾失敗：${err.message}`);
+                alert(`讀取雲端失敗：${err.message}`);
             } finally {
                 loadFolderBtn.disabled = false;
                 loadFolderBtn.innerHTML = `<i class="fa-solid fa-sync"></i><span>儲存並同步抓取</span>`;
             }
         });
 
-        // 初始化載入
+        // 初始化
         window.addEventListener('DOMContentLoaded', async () => {
             updateSchoolOptions();
-            renderExams();
 
             const { apiKey, folderUrl } = loadSavedCredentials();
-            if (apiKey && folderUrl) {
+            const cache = loadExamsFromCache();
+
+            // 優先嘗試從快取的資料渲染，實現秒開
+            if (cache && cache.exams && cache.exams.length > 0) {
+                exams = cache.exams;
+                updateSchoolOptions();
+                renderExams();
+            } else {
+                renderExams();
+            }
+
+            // 若有設定金鑰，且無快取或快取已過期，則於背景/初始化時同步更新
+            if (apiKey && folderUrl && (!cache || cache.isExpired)) {
                 try {
                     const files = await scanFolderRecursively(folderUrl, apiKey);
                     if (files.length > 0) {
                         exams = groupFilesIntoExams(files);
+                        saveExamsToCache(exams);
                         updateSchoolOptions();
                         renderExams();
                     }
